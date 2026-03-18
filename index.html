@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NoteFlow — Пишіть без обмежень</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" href="app/favicon.png">
+<style>
+[data-theme="dark"]{
+  --bg:#0d0d0f;--bg2:#131316;--bg3:#1a1a1f;--bg4:#222228;
+  --border:#2a2a32;--border2:#353540;
+  --text:#e8e8f0;--text2:#a0a0b8;--text3:#5a5a72;
+  --accent:#7c6af7;--accent2:#9d8fff;--accent-glow:rgba(124,106,247,0.15);
+  --green:#4ade80;--red:#f87171;--yellow:#fbbf24;--shadow:rgba(0,0,0,0.5);
+}
+[data-theme="light"]{
+  --bg:#f4f4f6;--bg2:#ffffff;--bg3:#ededf0;--bg4:#e2e2e8;
+  --border:#d8d8e0;--border2:#c8c8d4;
+  --text:#1a1a2e;--text2:#4a4a6a;--text3:#9090a8;
+  --accent:#6b58e8;--accent2:#7c6af7;--accent-glow:rgba(107,88,232,0.12);
+  --green:#16a34a;--red:#dc2626;--yellow:#d97706;--shadow:rgba(0,0,0,0.12);
+}
+
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:'Geist',sans-serif;
+  font-size:14px;
+  line-height:1.6;
+  min-height:100vh;
+  overflow-x:hidden;
+  transition:background .3s,color .3s;
+}
+
+/* ── Ambient glow ───────────────────────────── */
+.ambient{
+  position:fixed;
+  top:-20vh;left:50%;
+  transform:translateX(-50%);
+  width:900px;height:600px;
+  background:radial-gradient(ellipse at center,rgba(124,106,247,.14) 0%,transparent 70%);
+  pointer-events:none;
+  z-index:0;
+  animation:ambientPulse 8s ease-in-out infinite;
+}
+@keyframes ambientPulse{0%,100%{opacity:.7;transform:translateX(-50%) scale(1)}50%{opacity:1;transform:translateX(-50%) scale(1.08)}}
+
+/* ── NAV ────────────────────────────────────────────────────────────────── */
+nav{
+  position:sticky;top:0;z-index:100;
+  display:flex;align-items:center;gap:12px;
+  padding:0 32px;height:52px;
+  background:rgba(13,13,15,.82);
+  backdrop-filter:blur(18px);
+  border-bottom:1px solid var(--border);
+}
+[data-theme="light"] nav{background:rgba(244,244,246,.88);}
+.nav-logo{
+  font-family:'Instrument Serif',serif;
+  font-size:19px;
+  color:var(--text);
+  letter-spacing:-.02em;
+  text-decoration:none;
+}
+.nav-logo-dot{color:var(--accent);}
+.nav-spacer{flex:1;}
+.nav-links{display:flex;gap:4px;align-items:center;}
+.nav-link{
+  padding:5px 12px;
+  border-radius:7px;
+  color:var(--text2);
+  font-size:13px;
+  font-weight:500;
+  text-decoration:none;
+  transition:all 180ms;
+  border:1px solid transparent;
+}
+.nav-link:hover{color:var(--text);background:var(--bg3);border-color:var(--border);}
+.nav-cta{
+  padding:6px 16px;
+  border-radius:8px;
+  background:var(--accent);
+  color:#fff;
+  font-size:13px;
+  font-weight:500;
+  text-decoration:none;
+  transition:all 180ms;
+  border:1px solid transparent;
+}
+.nav-cta:hover{background:var(--accent2);transform:translateY(-1px);box-shadow:0 4px 16px rgba(124,106,247,.35);}
+
+/* theme toggle */
+.theme-toggle{
+  display:flex;align-items:center;gap:7px;
+  cursor:pointer;user-select:none;margin-left:30px;
+}
+.toggle-track{
+  width:36px;height:20px;
+  background:var(--bg4);
+  border:1px solid var(--border2);
+  border-radius:10px;
+  position:relative;
+  transition:background .25s;
+  cursor:pointer;flex-shrink:0;
+  left: -20px;
+}
+[data-theme="light"] .toggle-track{background:var(--accent);border-color:var(--accent);}
+.toggle-thumb{
+  width:14px;height:14px;
+  background:var(--text3);
+  border-radius:50%;
+  position:absolute;top:2px;left:2px;
+  transition:transform .22s cubic-bezier(.4,0,.2,1),background .22s;
+}
+[data-theme="light"] .toggle-thumb{transform:translateX(16px);background:#fff;}
+
+/* ── PAGE WRAPPER ───────────────────────────────────────────────────────── */
+main{position:relative;z-index:1;}
+
+/* ── HERO ───────────────────────────────────────────────────────────────── */
+.hero{
+  display:flex;flex-direction:column;align-items:center;
+  text-align:center;
+  padding:96px 24px 80px;
+  max-width:860px;
+  margin:0 auto;
+}
+.hero-badge{
+  display:inline-flex;align-items:center;gap:7px;
+  padding:4px 13px 4px 8px;
+  border:1px solid var(--border2);
+  border-radius:100px;
+  background:var(--bg3);
+  font-size:12px;color:var(--text2);
+  margin-bottom:32px;
+  opacity:0;
+  animation:fadeUp .5s .1s forwards;
+}
+.hero-badge-dot{
+  width:6px;height:6px;
+  border-radius:50%;
+  background:var(--green);
+  animation:pulse 1.5s infinite;
+}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+.hero-title{
+  font-family:'Instrument Serif',serif;
+  font-size:clamp(42px,7vw,76px);
+  line-height:1.08;
+  letter-spacing:-.03em;
+  color:var(--text);
+  margin-bottom:24px;
+  opacity:0;
+  animation:fadeUp .6s .2s forwards;
+}
+.hero-title em{
+  font-style:italic;
+  color:var(--accent2);
+}
+.hero-sub{
+  font-size:clamp(15px,2vw,18px);
+  color:var(--text2);
+  line-height:1.7;
+  max-width:520px;
+  margin-bottom:40px;
+  opacity:0;
+  animation:fadeUp .6s .35s forwards;
+}
+.hero-actions{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:center;
+  opacity:0;
+  animation:fadeUp .6s .5s forwards;
+}
+.btn-primary{
+  padding:11px 26px;
+  background:var(--accent);
+  color:#fff;
+  border:none;border-radius:10px;
+  font-size:14px;font-weight:500;
+  font-family:'Geist',sans-serif;
+  cursor:pointer;text-decoration:none;
+  display:inline-flex;align-items:center;gap:8px;
+  transition:all 200ms;
+  box-shadow:0 0 0 0 rgba(124,106,247,0);
+}
+.btn-primary:hover{
+  background:var(--accent2);
+  transform:translateY(-2px);
+  box-shadow:0 8px 28px rgba(124,106,247,.4);
+}
+.btn-secondary{
+  padding:11px 22px;
+  background:transparent;
+  color:var(--text2);
+  border:1px solid var(--border2);border-radius:10px;
+  font-size:14px;font-weight:500;
+  font-family:'Geist',sans-serif;
+  cursor:pointer;text-decoration:none;
+  display:inline-flex;align-items:center;gap:8px;
+  transition:all 200ms;
+}
+.btn-secondary:hover{
+  color:var(--text);
+  background:var(--bg3);
+  border-color:var(--accent);
+}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── EDITOR PREVIEW (mock app window) ──────────────────────────────────── */
+.preview-wrap{
+  max-width:980px;margin:0 auto;
+  padding:0 24px 80px;
+  opacity:0;
+  animation:fadeUp .7s .65s forwards;
+}
+.window-chrome{
+  border:1px solid var(--border2);
+  border-radius:14px;
+  overflow:hidden;
+  box-shadow:0 32px 80px var(--shadow),0 0 0 1px rgba(255,255,255,.03);
+  background:var(--bg2);
+}
+.window-bar{
+  display:flex;align-items:center;gap:8px;
+  padding:10px 16px;
+  background:var(--bg2);
+  border-bottom:1px solid var(--border);
+}
+.window-dot{width:10px;height:10px;border-radius:50%;}
+.window-dot.red{background:#f87171;}
+.window-dot.yellow{background:#fbbf24;}
+.window-dot.green{background:#4ade80;}
+.window-title{
+  flex:1;text-align:center;
+  font-size:12px;color:var(--text3);
+  font-family:'JetBrains Mono',monospace;
+}
+.window-body{
+  display:grid;
+  grid-template-columns:220px 1fr 1fr;
+  height:380px;
+}
+/* sidebar mock */
+.mock-sidebar{
+  border-right:1px solid var(--border);
+  background:var(--bg2);
+  display:flex;flex-direction:column;
+  overflow:hidden;
+}
+.mock-sidebar-top{
+  padding:10px;border-bottom:1px solid var(--border);
+  display:flex;gap:6px;align-items:center;
+}
+.mock-search{
+  flex:1;height:28px;
+  background:var(--bg3);border:1px solid var(--border);border-radius:7px;
+}
+.mock-btn{
+  width:28px;height:28px;border-radius:7px;
+  background:var(--accent);flex-shrink:0;
+}
+.mock-notes{padding:6px;display:flex;flex-direction:column;gap:3px;}
+.mock-note{
+  padding:8px 9px;border-radius:7px;
+  background:transparent;
+  border:1px solid transparent;
+}
+.mock-note.active{background:var(--accent-glow);border-color:var(--accent);}
+.mock-note-title{
+  height:9px;border-radius:3px;
+  background:var(--border2);
+  margin-bottom:5px;
+}
+.mock-note.active .mock-note-title{background:var(--accent2);opacity:.6;}
+.mock-note-meta{height:7px;border-radius:3px;background:var(--border);width:60%;}
+/* editor mock */
+.mock-editor{
+  border-right:1px solid var(--border);
+  background:var(--bg);
+  display:flex;flex-direction:column;
+}
+.mock-toolbar{
+  padding:7px 10px;
+  border-bottom:1px solid var(--border);
+  background:var(--bg2);
+  display:flex;gap:4px;align-items:center;
+}
+.mock-tb-btn{
+  width:26px;height:22px;border-radius:5px;
+  background:var(--bg3);border:1px solid var(--border);
+}
+.mock-tb-sep{width:1px;height:14px;background:var(--border);margin:0 2px;}
+.mock-content{flex:1;padding:14px 16px;display:flex;flex-direction:column;gap:10px;overflow:hidden;}
+.mock-heading{height:20px;border-radius:4px;background:var(--text);opacity:.7;width:55%;}
+.mock-line{height:9px;border-radius:3px;background:var(--border2);}
+.mock-line.short{width:72%;}
+.mock-line.med{width:88%;}
+.mock-code-block{
+  border-radius:8px;overflow:hidden;
+  border:1px solid var(--border);
+  flex-shrink:0;
+}
+.mock-code-bar{height:28px;background:var(--bg3);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 10px;gap:6px;}
+.mock-code-dot{width:7px;height:7px;border-radius:50%;background:var(--border2);}
+.mock-code-lines{padding:8px 10px;display:flex;flex-direction:column;gap:5px;background:var(--bg3);}
+.mock-code-line{height:8px;border-radius:2px;background:var(--accent);opacity:.22;}
+.mock-code-line.p{background:var(--green);opacity:.25;}
+.mock-code-line.s{background:var(--yellow);opacity:.22;}
+/* preview mock */
+.mock-preview{
+  background:var(--bg);
+  display:flex;flex-direction:column;
+  overflow:hidden;
+}
+.mock-preview-bar{
+  padding:7px 14px;
+  border-bottom:1px solid var(--border);
+  background:var(--bg2);
+  height:36px;
+}
+.mock-preview-content{flex:1;padding:14px 18px;display:flex;flex-direction:column;gap:10px;overflow:hidden;}
+.mock-h{height:22px;border-radius:4px;background:var(--text);opacity:.55;width:48%;
+  font-family:'Instrument Serif',serif;}
+.mock-p{height:8px;border-radius:3px;background:var(--border2);}
+.mock-p.s{width:70%;}
+.mock-blockquote{
+  border-left:3px solid var(--accent);
+  padding:4px 10px;
+  background:var(--accent-glow);
+  border-radius:0 5px 5px 0;
+  display:flex;flex-direction:column;gap:5px;
+}
+.mock-bq-line{height:7px;border-radius:2px;background:var(--accent2);opacity:.35;}
+
+/* ── FEATURES ───────────────────────────────────────────────────────────── */
+.section{padding:72px 24px;max-width:1040px;margin:0 auto;}
+.section-label{
+  font-size:11px;font-weight:600;
+  color:var(--accent2);
+  text-transform:uppercase;letter-spacing:.1em;
+  margin-bottom:12px;
+}
+.section-title{
+  font-family:'Instrument Serif',serif;
+  font-size:clamp(28px,4vw,42px);
+  line-height:1.15;
+  letter-spacing:-.02em;
+  color:var(--text);
+  margin-bottom:16px;
+}
+.section-sub{
+  font-size:15px;color:var(--text2);
+  line-height:1.7;max-width:480px;
+  margin-bottom:52px;
+}
+
+.features-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+  gap:16px;
+}
+.feature-card{
+  padding:24px;
+  border:1px solid var(--border);
+  border-radius:14px;
+  background:var(--bg2);
+  transition:all 220ms;
+  position:relative;
+  overflow:hidden;
+}
+.feature-card::before{
+  content:'';
+  position:absolute;inset:0;
+  background:radial-gradient(circle at 0% 0%,var(--accent-glow),transparent 65%);
+  opacity:0;transition:opacity 300ms;
+}
+.feature-card:hover{
+  border-color:var(--border2);
+  transform:translateY(-3px);
+  box-shadow:0 16px 40px var(--shadow);
+}
+.feature-card:hover::before{opacity:1;}
+.feature-icon{
+  width:36px;height:36px;
+  border:1px solid var(--border2);
+  border-radius:9px;
+  background:var(--bg3);
+  display:flex;align-items:center;justify-content:center;
+  margin-bottom:16px;
+  color:var(--accent2);
+  flex-shrink:0;
+}
+.feature-icon svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+.feature-title{
+  font-size:14px;font-weight:600;
+  color:var(--text);margin-bottom:7px;
+}
+.feature-desc{font-size:13px;color:var(--text2);line-height:1.65;}
+
+/* ── KEYBOARD SHORTCUTS STRIP ───────────────────────────────────────────── */
+.shortcuts-strip{
+  border-top:1px solid var(--border);
+  border-bottom:1px solid var(--border);
+  background:var(--bg2);
+  padding:28px 24px;
+  overflow:hidden;
+}
+.shortcuts-inner{
+  max-width:1040px;margin:0 auto;
+  display:flex;align-items:center;gap:12px;
+  flex-wrap:wrap;
+}
+.shortcuts-label{
+  font-size:12px;font-weight:600;color:var(--text3);
+  text-transform:uppercase;letter-spacing:.08em;
+  margin-right:8px;flex-shrink:0;
+}
+.shortcut{
+  display:inline-flex;align-items:center;gap:7px;
+  padding:5px 11px;
+  border:1px solid var(--border2);
+  border-radius:8px;
+  background:var(--bg3);
+  font-size:12px;color:var(--text2);
+}
+kbd{
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;color:var(--text);
+  background:var(--bg4);
+  border:1px solid var(--border2);
+  border-radius:4px;
+  padding:1px 5px;
+}
+
+/* ── MARKDOWN SHOWCASE ──────────────────────────────────────────────────── */
+.md-section{padding:72px 24px;max-width:1040px;margin:0 auto;}
+.md-split{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:20px;
+  align-items:start;
+}
+@media(max-width:640px){.md-split{grid-template-columns:1fr;}}
+.md-pane{
+  border:1px solid var(--border);
+  border-radius:12px;
+  overflow:hidden;
+  background:var(--bg2);
+}
+.md-pane-bar{
+  padding:8px 14px;
+  border-bottom:1px solid var(--border);
+  background:var(--bg3);
+  font-size:11px;font-weight:500;
+  color:var(--text3);
+  text-transform:uppercase;letter-spacing:.08em;
+  display:flex;align-items:center;gap:6px;
+}
+.md-pane-bar svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+.md-code{
+  padding:18px 20px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:12.5px;
+  line-height:1.85;
+  color:var(--text2);
+  white-space:pre;
+  overflow-x:auto;
+}
+.md-code .kw{color:var(--accent2);}
+.md-code .str{color:var(--green);}
+.md-code .cm{color:var(--text3);}
+.md-code .hl{color:var(--text);}
+.md-render{padding:20px 22px;font-size:13.5px;line-height:1.75;}
+.md-render h2{
+  font-family:'Instrument Serif',serif;
+  font-size:22px;font-weight:400;
+  color:var(--text);margin-bottom:8px;
+  border-bottom:1px solid var(--border);padding-bottom:6px;
+}
+.md-render p{color:var(--text2);margin-bottom:10px;}
+.md-render strong{color:var(--text);font-weight:600;}
+.md-render em{font-style:italic;}
+.md-render code{
+  font-family:'JetBrains Mono',monospace;
+  font-size:.84em;
+  background:var(--bg3);
+  padding:1px 6px;border-radius:4px;
+  border:1px solid var(--border);
+  color:var(--accent2);
+}
+.md-render blockquote{
+  border-left:3px solid var(--accent);
+  padding:4px 14px;
+  margin:10px 0;
+  background:var(--accent-glow);
+  border-radius:0 6px 6px 0;
+  color:var(--text2);
+  font-style:italic;
+}
+.md-render ul{padding-left:1.4em;color:var(--text2);}
+.md-render li{margin-bottom:4px;}
+.md-render a{color:var(--accent2);text-decoration:none;}
+.md-render a:hover{text-decoration:underline;}
+
+/* ── TEMP NOTE FEATURE ──────────────────────────────────────────────────── */
+.temp-section{
+  padding:72px 24px;
+  background:var(--bg2);
+  border-top:1px solid var(--border);
+  border-bottom:1px solid var(--border);
+}
+.temp-inner{max-width:1040px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;}
+@media(max-width:640px){.temp-inner{grid-template-columns:1fr;}}
+.temp-card{
+  border:1px solid var(--border2);
+  border-radius:14px;
+  overflow:hidden;
+  background:var(--bg);
+  box-shadow:0 20px 48px var(--shadow);
+}
+.temp-card-bar{
+  display:flex;align-items:center;gap:8px;
+  padding:10px 16px;
+  background:var(--bg2);
+  border-bottom:1px solid var(--border);
+  font-size:12px;color:var(--text3);
+}
+.flame-icon{color:var(--yellow);}
+.temp-card-body{padding:18px 20px;display:flex;flex-direction:column;gap:10px;}
+.temp-field{display:flex;flex-direction:column;gap:5px;}
+.temp-label{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;}
+.temp-options{display:flex;flex-direction:column;gap:7px;}
+.temp-option{
+  display:flex;align-items:center;gap:9px;
+  padding:8px 11px;
+  border:1px solid var(--border);border-radius:8px;
+  background:var(--bg3);
+  font-size:13px;color:var(--text2);
+  cursor:default;
+}
+.temp-option.checked{border-color:var(--accent);background:var(--accent-glow);color:var(--text);}
+.temp-check{
+  width:15px;height:15px;
+  border:1.5px solid var(--border2);
+  border-radius:4px;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+}
+.temp-option.checked .temp-check{
+  background:var(--accent);
+  border-color:var(--accent);
+}
+.temp-check-mark{display:none;}
+.temp-option.checked .temp-check-mark{display:block;color:#fff;}
+.temp-check-mark svg{width:10px;height:10px;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;}
+.temp-link-box{
+  display:flex;align-items:center;gap:8px;
+  background:var(--bg3);border:1px solid var(--border);border-radius:9px;
+  padding:9px 12px;margin-top:4px;
+}
+.temp-link-url{
+  flex:1;font-family:'JetBrains Mono',monospace;font-size:11px;
+  color:var(--accent2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.temp-copy-btn{
+  background:var(--accent);border:none;border-radius:6px;
+  color:#fff;padding:4px 10px;font-size:12px;cursor:pointer;
+  font-family:'Geist',sans-serif;
+}
+
+/* ── CTA SECTION ────────────────────────────────────────────────────────── */
+.cta-section{
+  padding:100px 24px;
+  text-align:center;
+  position:relative;
+  overflow:hidden;
+}
+.cta-glow{
+  position:absolute;
+  top:50%;left:50%;
+  transform:translate(-50%,-50%);
+  width:600px;height:400px;
+  background:radial-gradient(ellipse,rgba(124,106,247,.12),transparent 70%);
+  pointer-events:none;
+}
+.cta-title{
+  font-family:'Instrument Serif',serif;
+  font-size:clamp(32px,5vw,54px);
+  line-height:1.1;letter-spacing:-.025em;
+  color:var(--text);margin-bottom:16px;
+  position:relative;z-index:1;
+}
+.cta-sub{
+  font-size:15px;color:var(--text2);
+  max-width:440px;margin:0 auto 36px;
+  line-height:1.7;
+  position:relative;z-index:1;
+}
+.cta-actions{
+  display:flex;align-items:center;gap:12px;justify-content:center;flex-wrap:wrap;
+  position:relative;z-index:1;
+}
+
+/* ── FOOTER ─────────────────────────────────────────────────────────────── */
+footer{
+  border-top:1px solid var(--border);
+  background:var(--bg2);
+  padding:24px 32px;
+  display:flex;align-items:center;
+  gap:16px;
+}
+.footer-logo{
+  font-family:'Instrument Serif',serif;
+  font-size:16px;color:var(--text2);
+  letter-spacing:-.02em;
+}
+.footer-dot{color:var(--accent);}
+.footer-spacer{flex:1;}
+.footer-note{font-size:12px;color:var(--text3);}
+
+/* ── SVG icon helper ────────────────────────────────────────────────────── */
+.ic{width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;}
+.ic svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+
+/* ── Scroll-reveal ──────────────────────────────────────────────────────── */
+.reveal{opacity:0;transform:translateY(22px);transition:opacity .55s ease,transform .55s ease;}
+.reveal.visible{opacity:1;transform:none;}
+</style>
+</head>
+<body>
+
+<!-- Ambient background glow -->
+<div class="ambient"></div>
+
+<!-- ── NAV ───────────────────────────────────────────────────────────────── -->
+<nav>
+  <a href="#" class="nav-logo">NoteFlow</a>
+  <div class="nav-spacer"></div>
+  <div class="nav-links">
+    <a href="#features" class="nav-link">Функції</a>
+    <a href="#markdown" class="nav-link">Markdown</a>
+    <a href="#sharing" class="nav-link">Поширення</a>
+    <label class="theme-toggle" id="themeToggle" title="Toggle theme">
+      <div class="toggle-track"><div class="toggle-thumb"></div></div>
+    </label>
+    <a href="app" class="nav-cta">Відкрити</a>
+  </div>
+</nav>
+
+<!-- ── HERO ──────────────────────────────────────────────────────────────── -->
+<main>
+<section class="hero">
+  <div class="hero-badge">
+    <span class="hero-badge-dot"></span>
+    Тепер із попереднім переглядом Markdown у реальному часі
+  </div>
+  <h1 class="hero-title">
+    Write clearly.<br><em>Think deeply.</em>
+  </h1>
+  <p class="hero-sub">
+    NoteFlow — мінімалістичний Markdown-редактор із live-переглядом, підсвіткою синтаксису, тимчасовими самознищуваними нотатками та безпечним поширенням.
+  </p>
+  <div class="hero-actions">
+    <a href="app" class="btn-primary">
+      <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      Почни писати зараз
+    </a>
+
+  </div>
+</section>
+
+<!-- ── MOCK APP WINDOW ────────────────────────────────────────────────────── -->
+<div class="preview-wrap">
+  <div class="window-chrome">
+    <div class="window-bar">
+      <span class="window-dot red"></span>
+      <span class="window-dot yellow"></span>
+      <span class="window-dot green"></span>
+      <span class="window-title">Noteflow — Meeting Notes.md</span>
+    </div>
+    <div class="window-body">
+      <!-- sidebar -->
+      <div class="mock-sidebar">
+        <div class="mock-sidebar-top">
+          <div class="mock-search"></div>
+          <div class="mock-btn"></div>
+        </div>
+        <div class="mock-notes">
+          <div class="mock-note active">
+            <div class="mock-note-title" style="width:75%"></div>
+            <div class="mock-note-meta"></div>
+          </div>
+          <div class="mock-note">
+            <div class="mock-note-title" style="width:60%"></div>
+            <div class="mock-note-meta"></div>
+          </div>
+          <div class="mock-note">
+            <div class="mock-note-title" style="width:82%"></div>
+            <div class="mock-note-meta"></div>
+          </div>
+          <div class="mock-note">
+            <div class="mock-note-title" style="width:50%"></div>
+            <div class="mock-note-meta"></div>
+          </div>
+          <div class="mock-note">
+            <div class="mock-note-title" style="width:68%"></div>
+            <div class="mock-note-meta"></div>
+          </div>
+        </div>
+      </div>
+      <!-- editor -->
+      <div class="mock-editor">
+        <div class="mock-toolbar">
+          <div class="mock-tb-btn" style="width:34px"></div>
+          <div class="mock-tb-btn" style="width:34px"></div>
+          <div class="mock-tb-btn" style="width:34px"></div>
+          <div class="mock-tb-sep"></div>
+          <div class="mock-tb-btn"></div>
+          <div class="mock-tb-btn"></div>
+          <div class="mock-tb-sep"></div>
+          <div class="mock-tb-btn"></div>
+          <div class="mock-tb-btn"></div>
+          <div class="mock-tb-btn"></div>
+        </div>
+        <div class="mock-content">
+          <div class="mock-heading"></div>
+          <div class="mock-line med"></div>
+          <div class="mock-line"></div>
+          <div class="mock-line short"></div>
+          <div class="mock-code-block">
+            <div class="mock-code-bar">
+              <div class="mock-code-dot"></div>
+              <div class="mock-code-dot"></div>
+            </div>
+            <div class="mock-code-lines">
+              <div class="mock-code-line" style="width:88%"></div>
+              <div class="mock-code-line p" style="width:62%"></div>
+              <div class="mock-code-line s" style="width:75%"></div>
+              <div class="mock-code-line" style="width:45%"></div>
+            </div>
+          </div>
+          <div class="mock-line med"></div>
+          <div class="mock-line short"></div>
+        </div>
+      </div>
+      <!-- preview -->
+      <div class="mock-preview">
+        <div class="mock-preview-bar"></div>
+        <div class="mock-preview-content">
+          <div class="mock-h"></div>
+          <div class="mock-p"></div>
+          <div class="mock-p s"></div>
+          <div class="mock-p" style="width:93%"></div>
+          <div class="mock-blockquote">
+            <div class="mock-bq-line" style="width:80%"></div>
+            <div class="mock-bq-line" style="width:55%"></div>
+          </div>
+          <div class="mock-p" style="width:85%"></div>
+          <div class="mock-p s"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── FEATURES ───────────────────────────────────────────────────────────── -->
+<section class="section reveal" id="features">
+  <div class="section-label">Усе, що вам потрібно</div>
+  <h2 class="section-title">Створено так, як <br>насправді мислять автори</h2>
+  <p class="section-sub">Без зайвих функцій і без безладу — лише інструменти, які справді важливі.</p>
+
+  <div class="features-grid"> 
+
+    <div class="feature-card">
+      <div class="feature-icon">
+        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+      </div>
+      <div class="feature-title">Live-перегляд Markdown</div>
+      <div class="feature-desc">Бачте відформатований результат поруч під час набору. Заголовки, блоки коду, таблиці та цитати миттєво відображаються з підсвіткою синтаксису для 70+ мов.</div>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-icon">
+        <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+      </div>
+      <div class="feature-title">Панель форматування</div>
+      <div class="feature-desc">Швидкі кнопки для жирного тексту, курсиву, заголовків, списків, цитат, посилань і коду. Кнопки контекстні — вони активуються, коли курсор знаходиться всередині відповідного синтаксису.</div>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-icon">
+        <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+      </div>
+      <div class="feature-title">Безпечний доступ</div>
+      <div class="feature-desc">Створюйте унікальне посилання для будь-якої нотатки. Додайте пароль, встановіть час дії або увімкніть режим одноразового перегляду — нотатка самознищується після першого відкриття.</div>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-icon">
+        <svg viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
+      </div>
+      <div class="feature-title">Нотатки з самознищенням</div>
+      <div class="feature-desc">Позначте нотатку як одноразову. Після відкриття отримувачем вона назавжди видаляється із сервера — без можливості відновлення. Підходить для конфіденційної інформації.</div>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-icon">
+        <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      </div>
+      <div class="feature-title">Захист паролем</div>
+      <div class="feature-desc">Захистіть нотатку паролем перед поширенням. Отримувач повинен ввести правильний пароль, щоб відкрити вміст — навіть одноразові нотатки можуть бути захищеними.</div>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-icon">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      </div>
+      <div class="feature-title">Час дії нотаток</div>
+      <div class="feature-desc">Встановіть автоматичне видалення через 1 годину, 24 години, 3 дні або 30 днів. Після завершення часу посилання перестає працювати, нічого очищати вручну не потрібно.</div>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-icon">
+        <svg viewBox="0 0 24 24"><line x1="21" y1="21" x2="15" y2="15"/><circle cx="11" cy="11" r="7"/></svg>
+      </div>
+      <div class="feature-title">Миттєвий пошук</div>
+      <div class="feature-desc">Повнотекстовий пошук по всіх нотатках у реальному часі. Знаходьте потрібне одразу під час введення — індексуються і заголовки, і вміст.</div>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-icon">
+        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      </div>
+      <div class="feature-title">Експорт у Markdown</div>
+      <div class="feature-desc">Завантажте будь-яку нотатку як файл <code style="font-size:12px;background:var(--bg3);padding:1px 5px;border-radius:4px;border:1px solid var(--border);color:var(--accent2);font-family:'JetBrains Mono',monospace">.md</code> одним кліком. Ваші нотатки залишаються переносимими та придатними для використання в майбутньому.</div>
+    </div>
+
+    <div class="feature-card">
+      <div class="feature-icon">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </div>
+      <div class="feature-title">Темна та світла тема</div>
+      <div class="feature-desc">Перемикайтеся між темною темою (Tokyo Night syntax) і світлою темою (GitHub syntax) — вибір зберігається у сесії.</div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── MARKDOWN SHOWCASE ──────────────────────────────────────────────────── -->
+<section class="md-section reveal" id="markdown">
+  <div class="section-label">Markdown перш за все</div>
+  <h2 class="section-title">Пишіть у звичайному тексті.<br>Читайте у форматованому вигляді.</h2>
+  <p class="section-sub" style="margin-bottom:36px">Вводьте стандартний Markdown і спостерігайте, як він у реальному часі перетворюється на красиво відформатований текст.</p>
+
+  <div class="md-split">
+    <div class="md-pane">
+      <div class="md-pane-bar">
+        <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        Markdown source
+      </div>
+      <div class="md-code"><span class="kw">## </span><span class="hl">Project Overview</span>
+
+This is a **bold statement** and _italic text_
+with a `code snippet` inline.
+
+<span class="kw">> </span><span class="cm">The best tool is the one you'll actually use every day.</span>
+
+- Feature one is <span class="str">complete</span>
+- Feature two is in progress
+- Feature three is planned
+
+[Read the docs](https://example.com)</div>
+    </div>
+    <div class="md-pane">
+      <div class="md-pane-bar">
+        <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        Перегляд
+      </div>
+      <div class="md-render">
+        <h2>Project Overview</h2>
+        <p>This is a <strong>bold statement</strong> and <em>italic text</em> with a <code>code snippet</code> inline.</p>
+        <blockquote>The best tool is the one you'll actually use every day.</blockquote>
+        <ul>
+          <li>Feature one is complete</li>
+          <li>Feature two is in progress</li>
+          <li>Feature three is planned</li>
+        </ul>
+        <p><a href="https://example.com">Read the docs</a></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── SELF-DESTRUCT FEATURE ──────────────────────────────────────────────── -->
+<div class="temp-section reveal" id="sharing">
+  <div class="temp-inner">
+    <div>
+      <div class="section-label">Ефемерні нотатки</div>
+      <h2 class="section-title">Діліться секретами,<br><em style="color:var(--yellow)">які зникають.</em></h2>
+      <p style="font-size:15px;color:var(--text2);line-height:1.7;margin-bottom:20px">
+        Деякі речі не повинні зберігатися назавжди. NoteFlow дозволяє ділитися нотатками, які зникають після прочитання — один перегляд і вони зникають. Додайте пароль для повної безпеки.
+      </p>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:28px">
+        <div style="display:flex;align-items:flex-start;gap:12px">
+          <div style="width:20px;height:20px;border-radius:50%;background:var(--accent-glow);border:1px solid var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">
+            <svg width="10" height="10" fill="none" stroke="var(--accent2)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <span style="font-size:13px;color:var(--text2)">Нотатка видаляється із сервера в момент відкриття</span>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:12px">
+          <div style="width:20px;height:20px;border-radius:50%;background:var(--accent-glow);border:1px solid var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">
+            <svg width="10" height="10" fill="none" stroke="var(--accent2)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <span style="font-size:13px;color:var(--text2)">Вміст доступний лише під час поточної сесії</span>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:12px">
+          <div style="width:20px;height:20px;border-radius:50%;background:var(--accent-glow);border:1px solid var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">
+            <svg width="10" height="10" fill="none" stroke="var(--accent2)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <span style="font-size:13px;color:var(--text2)">Будь-яка наступна спроба доступу повертає «нотатку не знайдено»</span>
+        </div>
+      </div>
+      <a href="app" class="btn-primary" style="display:inline-flex">Спробувати зараз →</a>
+    </div>
+
+    <div class="temp-card">
+      <div class="temp-card-bar">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+        Параметри поширення
+      </div>
+      <div class="temp-card-body">
+        <div class="temp-field">
+          <span class="temp-label">Параметри нотатки</span>
+          <div class="temp-options">
+            <div class="temp-option checked">
+              <div class="temp-check">
+                <div class="temp-check-mark">
+                  <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+              </div>
+              <span class="flame-icon">
+                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
+              </span>
+              Видалити після першого прочитання
+            </div>
+            <div class="temp-option">
+              <div class="temp-check"></div>
+              <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" style="color:var(--accent2)"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              Встановити термін дії
+            </div>
+          </div>
+        </div>
+        <div class="temp-field">
+          <span class="temp-label">Посилання для доступу</span>
+          <div class="temp-link-box">
+            <svg width="12" height="12" fill="none" stroke="var(--accent2)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            <span class="temp-link-url">shared.php?id=a3f9e12b7c04d8e1</span>
+            <button class="temp-copy-btn">Copy</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── CTA ────────────────────────────────────────────────────────────────── -->
+<section class="cta-section reveal">
+  <div class="cta-glow"></div>
+  <h2 class="cta-title">Готові писати<br>без обмежень?</h2>
+  <p class="cta-sub">Без облікового запису. Без налаштування. Відкрийте редактор і почніть писати за кілька секунд — ваші нотатки зберігаються локально, поки ви не вирішите поділитися ними.</p>
+  <div class="cta-actions">
+    <a href="app" class="btn-primary" style="font-size:15px;padding:13px 30px">
+      <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      Відкрити
+    </a>
+  </div>
+</section>
+
+</main>
+
+<!-- ── FOOTER ─────────────────────────────────────────────────────────────── -->
+<footer>
+  <span class="footer-logo">Noteflow</span>
+  <div class="footer-spacer"></div>
+  <span class="footer-note">Markdown-нотатки з live-переглядом та безпечним поширенням</span>
+</footer>
+
+<script>
+// ── Theme toggle ──────────────────────────────────────────────────────────
+const html = document.documentElement;
+const saved = localStorage.getItem('nc_theme') || 'dark';
+html.setAttribute('data-theme', saved);
+
+document.getElementById('themeToggle').addEventListener('click', function () {
+  const next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  html.setAttribute('data-theme', next);
+  localStorage.setItem('nc_theme', next);
+});
+
+// ── Scroll-reveal ─────────────────────────────────────────────────────────
+const revealEls = document.querySelectorAll('.reveal');
+const observer = new IntersectionObserver(function (entries) {
+  entries.forEach(function (entry) {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+      observer.unobserve(entry.target);
+    }
+  });
+}, { threshold: 0.12 });
+revealEls.forEach(function (el) { observer.observe(el); });
+
+// ── Smooth scroll for anchor links ────────────────────────────────────────
+document.querySelectorAll('a[href^="#"]').forEach(function (a) {
+  a.addEventListener('click', function (e) {
+    const target = document.querySelector(a.getAttribute('href'));
+    if (target) {
+      e.preventDefault();
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
+});
+</script>
+</body>
+</html>
