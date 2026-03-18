@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NoteFlow — Редактор нотаток</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link id="hlTheme" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/tokyo-night-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- SVG SPRITE -->
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="ic-menu" viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></symbol>
+  <symbol id="ic-plus" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
+  <symbol id="ic-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="22" y2="22"/></symbol>
+  <symbol id="ic-layout" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="18" rx="1"/><rect x="13" y="3" width="8" height="10" rx="1"/><rect x="13" y="15" width="8" height="6" rx="1"/></symbol>
+  <symbol id="ic-share" viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></symbol>
+  <symbol id="ic-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></symbol>
+  <symbol id="ic-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></symbol>
+  <symbol id="ic-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></symbol>
+  <symbol id="ic-note" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></symbol>
+  <symbol id="ic-trash" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></symbol>
+  <symbol id="ic-pin" viewBox="0 0 24 24"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24z"/></symbol>
+  <symbol id="ic-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+  <symbol id="ic-lock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+  <symbol id="ic-eye" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="ic-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+  <symbol id="ic-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></symbol>
+  <symbol id="ic-code" viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></symbol>
+  <symbol id="ic-bold" viewBox="0 0 24 24"><path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/></symbol>
+  <symbol id="ic-italic" viewBox="0 0 24 24"><line x1="19" y1="4" x2="10" y2="4"/><line x1="14" y1="20" x2="5" y2="20"/><line x1="15" y1="4" x2="9" y2="20"/></symbol>
+  <symbol id="ic-quote" viewBox="0 0 24 24"><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"/></symbol>
+  <symbol id="ic-list-ul" viewBox="0 0 24 24"><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><circle cx="4" cy="6" r="1.5" fill="currentColor" stroke="none"/><circle cx="4" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="4" cy="18" r="1.5" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="ic-list-ol" viewBox="0 0 24 24"><line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4" stroke-width="1.6"/><path d="M4 10h2" stroke-width="1.6"/><path d="M4 14h2l-2 4h2" stroke-width="1.6"/></symbol>
+  <symbol id="ic-chevron-down" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></symbol>
+  <symbol id="ic-flame" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></symbol>
+  <symbol id="ic-warning" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
+</svg>
+
+<!-- APP -->
+<div id="app">
+
+  <!-- HEADER -->
+  <header id="header">
+    <button class="btn-icon" id="sidebarToggle" title="Бічна панель (Ctrl+\)">
+      <span class="icon"><svg><use href="#ic-menu"/></svg></span>
+    </button>
+    <span class="logo">Noteflow</span>
+    <div class="header-spacer"></div>
+    <div class="autosave-indicator" id="autosaveIndicator">
+      <span class="autosave-dot"></span> Збережено
+    </div>
+    <div class="header-actions">
+      <label class="theme-toggle" id="themeToggleLabel" title="Змінити тему">
+        <span class="icon" id="themeIcon" style="color:var(--text3)"><svg><use href="#ic-moon"/></svg></span>
+        <div class="toggle-track"><div class="toggle-thumb"></div></div>
+      </label>
+      <button class="btn-icon" id="togglePreviewBtn" title="Попередній перегляд (Ctrl+P)">
+        <span class="icon"><svg><use href="#ic-layout"/></svg></span>
+      </button>
+      <button class="btn-icon" id="shareBtn" title="Поділитись / Налаштування">
+        <span class="icon"><svg><use href="#ic-share"/></svg></span>
+      </button>
+      <button class="btn-icon" id="exportBtn" title="Експортувати як Markdown">
+        <span class="icon"><svg><use href="#ic-download"/></svg></span>
+      </button>
+    </div>
+  </header>
+
+  <!-- SIDEBAR -->
+  <aside id="sidebar">
+    <div class="sidebar-top">
+      <div class="search-wrap">
+        <span class="search-icon-abs">
+          <span class="icon" style="width:14px;height:14px"><svg><use href="#ic-search"/></svg></span>
+        </span>
+        <input type="text" id="searchInput" placeholder="Пошук нотаток…">
+      </div>
+      <button class="btn-new" id="newNoteBtn" title="Нова нотатка (Ctrl+N)">
+        <span class="icon"><svg><use href="#ic-plus"/></svg></span>
+      </button>
+    </div>
+    <div class="notes-list" id="notesList"></div>
+  </aside>
+
+  <!-- EDITOR -->
+  <main id="editor-panel">
+    <div class="temp-banner hidden" id="tempBanner">
+      <span class="icon" style="width:14px;height:14px"><svg><use href="#ic-flame"/></svg></span>
+      <span id="tempBannerText"></span>
+    </div>
+    <div class="toolbar">
+      <button class="tb-btn" data-action="h1" title="Заголовок 1" style="width:34px">H1</button>
+      <button class="tb-btn" data-action="h2" title="Заголовок 2" style="width:34px">H2</button>
+      <button class="tb-btn" data-action="h3" title="Заголовок 3" style="width:34px">H3</button>
+      <div class="toolbar-sep"></div>
+      <button class="tb-btn" data-action="bold" title="Жирний">
+        <span class="icon"><svg><use href="#ic-bold"/></svg></span>
+      </button>
+      <button class="tb-btn" data-action="italic" title="Курсив">
+        <span class="icon"><svg><use href="#ic-italic"/></svg></span>
+      </button>
+      <div class="toolbar-sep"></div>
+      <button class="tb-btn" data-action="ul" title="Маркований список">
+        <span class="icon"><svg><use href="#ic-list-ul"/></svg></span>
+      </button>
+      <button class="tb-btn" data-action="ol" title="Нумерований список">
+        <span class="icon"><svg><use href="#ic-list-ol"/></svg></span>
+      </button>
+      <button class="tb-btn" data-action="quote" title="Цитата">
+        <span class="icon"><svg><use href="#ic-quote"/></svg></span>
+      </button>
+      <div class="toolbar-sep"></div>
+      <button class="tb-btn" data-action="link" title="Вставити посилання">
+        <span class="icon"><svg><use href="#ic-link"/></svg></span>
+      </button>
+      <button class="tb-btn" data-action="inlinecode" title="Рядковий код">
+        <span class="icon"><svg><use href="#ic-code"/></svg></span>
+      </button>
+      <div class="lang-btn-wrap" id="langBtnWrap">
+        <button class="lang-trigger" id="langTrigger">
+          <span class="icon" style="width:13px;height:13px"><svg><use href="#ic-code"/></svg></span>
+          Блок коду
+          <span class="icon" style="width:12px;height:12px"><svg><use href="#ic-chevron-down"/></svg></span>
+        </button>
+        <div class="lang-dropdown" id="langDropdown">
+          <div class="lang-search-wrap">
+            <input type="text" class="lang-search" id="langSearch" placeholder="Пошук мови…">
+          </div>
+          <div class="lang-list" id="langList"></div>
+        </div>
+      </div>
+    </div>
+    <div class="editor-area">
+      <div class="empty-state" id="emptyState">
+        <span class="empty-state-icon">
+          <span class="icon" style="width:40px;height:40px"><svg><use href="#ic-note"/></svg></span>
+        </span>
+        <p>Виберіть нотатку або створіть нову</p>
+      </div>
+      <!-- відображається, коли редагування заблоковано після поширення -->
+      <div class="readonly-banner hidden" id="readonlyBanner">
+        <span class="icon" style="width:13px;height:13px"><svg><use href="#ic-lock"/></svg></span>
+        <span><strong>Лише читання</strong> — цю нотатку опубліковано і її більше не можна редагувати.</span>
+      </div>
+      <input type="text" id="noteTitle" placeholder="Назва нотатки…" style="display:none">
+      <textarea id="noteContent" placeholder="Починайте писати у Markdown…" style="display:none"></textarea>
+    </div>
+  </main>
+
+  <!-- PREVIEW -->
+  <div id="preview-panel">
+    <div class="preview-header">
+      <span class="icon" style="width:13px;height:13px"><svg><use href="#ic-eye"/></svg></span>
+      Перегляд
+    </div>
+    <div id="previewContent"></div>
+  </div>
+
+</div><!-- /#app -->
+
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- SHARE MODAL -->
+<div class="modal-overlay" id="shareModal">
+  <div class="modal">
+    <div class="modal-title">Поділитись нотаткою</div>
+    <div class="modal-sub">Налаштуйте параметри публікації та термін дії нотатки.</div>
+    <div class="modal-field">
+      <label class="modal-label">Параметри</label>
+      <div class="modal-checkbox-group">
+        <label class="modal-checkbox-row">
+          <input type="checkbox" id="readOnceCheck">
+          <span class="icon" style="width:14px;height:14px;color:var(--yellow)"><svg><use href="#ic-flame"/></svg></span>
+          <span>Видалити після першого перегляду</span>
+        </label>
+        <label class="modal-checkbox-row">
+          <input type="checkbox" id="hasExpiryCheck">
+          <span class="icon" style="width:14px;height:14px;color:var(--accent2)"><svg><use href="#ic-clock"/></svg></span>
+          <span>Встановити термін дії</span>
+        </label>
+      </div>
+    </div>
+    <div class="modal-field" id="expiryRow" style="display:none">
+      <label class="modal-label">Закінчується через</label>
+      <select class="modal-select" id="expirySelect">
+        <option value="3600">1 годину</option>
+        <option value="21600">6 годин</option>
+        <option value="86400" selected>24 години</option>
+        <option value="259200">3 дні</option>
+        <option value="604800">7 днів</option>
+        <option value="2592000">30 днів</option>
+      </select>
+    </div>
+    <div class="modal-field">
+      <label class="modal-label" style="display:flex;align-items:center;gap:5px">
+        <span class="icon" style="width:12px;height:12px"><svg><use href="#ic-lock"/></svg></span>
+        Захист паролем
+      </label>
+      <input type="password" class="modal-input" id="notePassword" placeholder="Залиште порожнім, якщо пароль не потрібен">
+    </div>
+    <div class="share-link-box">
+      <span class="icon" style="width:13px;height:13px;color:var(--accent2);flex-shrink:0"><svg><use href="#ic-link"/></svg></span>
+      <span class="share-link-url" id="shareLinkUrl">Натисніть «Зберегти і згенерувати посилання»</span>
+      <button class="btn-copy" id="copyLinkBtn">Копіювати</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="shareModalClose">Скасувати</button>
+      <button class="btn-primary" id="applyShareSettings">Зберегти і згенерувати посилання</button>
+    </div>
+  </div>
+</div>
+
+<!-- DELETE MODAL -->
+<div class="modal-overlay" id="deleteModal">
+  <div class="modal" style="max-width:340px">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:10px;margin-bottom:18px">
+      <span class="icon" style="width:36px;height:36px;color:var(--red)"><svg><use href="#ic-trash"/></svg></span>
+      <div class="modal-title" style="text-align:center">Видалити нотатку?</div>
+      <div style="font-size:13px;color:var(--text3);text-align:center">Цю дію неможливо скасувати.</div>
+    </div>
+    <div class="modal-actions" style="justify-content:center">
+      <button class="btn-cancel" id="deleteModalClose">Скасувати</button>
+      <button class="btn-primary" id="confirmDelete" style="background:var(--red)">Видалити</button>
+    </div>
+  </div>
+</div>
+
+<!-- PASSWORD MODAL -->
+<div class="modal-overlay" id="passwordModal">
+  <div class="modal" style="max-width:340px">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:10px;margin-bottom:18px">
+      <span class="icon" style="width:36px;height:36px;color:var(--accent)"><svg><use href="#ic-lock"/></svg></span>
+      <div class="modal-title" style="text-align:center">Потрібен пароль</div>
+      <div style="font-size:13px;color:var(--text3);text-align:center">Ця нотатка захищена паролем.</div>
+    </div>
+    <div class="modal-field">
+      <input type="password" class="modal-input" id="passwordInput" placeholder="Введіть пароль">
+    </div>
+    <div class="modal-actions" style="justify-content:center">
+      <button class="btn-cancel" id="passwordModalClose">Скасувати</button>
+      <button class="btn-primary" id="confirmPassword">Відкрити</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONTEXT MENU -->
+<div class="ctx-menu" id="ctxMenu" style="display:none">
+  <div class="ctx-item" id="ctx-pin">
+    <span class="icon" style="width:13px;height:13px"><svg><use href="#ic-pin"/></svg></span>
+    <span id="ctx-pin-label">Закріпити нотатку</span>
+  </div>
+  <div class="ctx-item" id="ctx-share">
+    <span class="icon" style="width:13px;height:13px"><svg><use href="#ic-share"/></svg></span>
+    Налаштування публікації
+  </div>
+  <div class="ctx-item" id="ctx-export">
+    <span class="icon" style="width:13px;height:13px"><svg><use href="#ic-download"/></svg></span>
+    Експортувати
+  </div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item danger" id="ctx-delete">
+    <span class="icon" style="width:13px;height:13px"><svg><use href="#ic-trash"/></svg></span>
+    Видалити
+  </div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
