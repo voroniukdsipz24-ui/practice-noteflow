@@ -1,11 +1,11 @@
 document.addEventListener('DOMContentLoaded', function () {
  
   // ── API BASE ───────────────────────────────────
-  // Якщо застосунок працює на тому ж PHP-хості — залишити ''
-  // Для окремого API-сервера вкажіть, наприклад: 'https://api.example.com'
+  // When served from the same PHP host, leave this as ''.
+  // For a separate API host set e.g. 'https://api.example.com'
   const API_BASE = '';
  
-  // ── ДОПОМІЖНІ ФУНКЦІЇ API ────────────────────────────────
+  // ── API HELPERS ────────────────────────────────
   async function apiPost(endpoint, body) {
     const r = await fetch(API_BASE + endpoint, {
       method: 'POST',
@@ -29,18 +29,18 @@ document.addEventListener('DOMContentLoaded', function () {
     return r.json();
   }
  
-  // Відправка нотатки в базу даних
-  // - Якщо dbId ще немає → POST create.php (створення нового запису)
-  // - Якщо dbId вже є → POST create.php з цим ID (оновлення)
-  // Повертає dbId від сервера при успіху або null при помилці
+  // Push a note to the DB.
+  // - If the note has no dbId yet → POST create.php (new row, gets server-side hex ID)
+  // - If it already has a dbId   → POST create.php with that ID (update row)
+  // Returns the server-assigned dbId on success, null on failure.
   async function syncNoteToDb(note) {
     try {
       const payload = {
         title:     note.title,
         content:   note.content,
         read_once: note.readOnce || false,
-        expire_in: note.expireIn || null,   // секунди; null = без обмеження терміну
-        password:  note.passwordPlain || '', // хешується на стороні сервера
+        expire_in: note.expireIn || null,   // seconds; null = no expiry
+        password:  note.passwordPlain || '', // plain text, hashed server-side
       };
 	  
 	  if (note.editToken) {
@@ -51,7 +51,7 @@ document.addEventListener('DOMContentLoaded', function () {
  
       const res = await apiPost('create.php', payload);
       if (res.ok && res.id) {
-        note.editToken = res.edit_token; // зберігаємо токен
+        note.editToken = res.edit_token; // 🔥 зберігаємо токен
         return res.id;
       }
       console.error('syncNoteToDb failed:', res);
@@ -62,7 +62,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
  
-  // ── ДАНІ МОВ ПРОГРАМУВАННЯ ──────────────────────────────
+  // ── LANGUAGE DATA ──────────────────────────────
   const LANGUAGES = [
     'ABAP','ActionScript','Ada','AppleScript','Arduino','Assembly','AutoHotkey','AWK',
     'Bash','BASIC','Batch','Brainfuck',
@@ -104,17 +104,17 @@ document.addEventListener('DOMContentLoaded', function () {
     return LANG_ID[name] || name.toLowerCase().replace(/[^a-z0-9]/g, '');
   }
  
-  // ── СТАН ─────────────────────────────
-  // Кожен об’єкт нотатки:
-  //   id            — локальний UUID (використовується як ключ у sidebar та редакторі)
-  //   dbId          — ID від сервера (hex), встановлюється після першої синхронізації; використовується в посиланнях
+  // ── STATE ──────────────────────────────────────
+  // Each note object:
+  //   id            – local UUID (used as key in sidebar, editor)
+  //   dbId          – server-assigned hex ID (set after first sync; used in share links)
   //   title, content, createdAt, updatedAt, pinned
-  //   readOnce      — bool
-  //   expireIn      — час у секундах (null = без обмеження); зберігається для повторної відправки в API
-  //   expireAt      — timestamp JS (мс) для локального відображення таймера
-  //   password      — відкритий текст (показується у share modal, очищається після синхронізації)
-  //   passwordPlain — те саме, що password; використовується тільки під час syncNoteToDb
-  //   passwordSet   — bool: чи має нотатка пароль на сервері
+  //   readOnce      – bool
+  //   expireIn      – seconds (null = never); stored so we can re-send to API on update
+  //   expireAt      – JS timestamp (ms) for local countdown display
+  //   password      – plain-text shown in share modal (cleared after sync)
+  //   passwordPlain – same as password, used only during syncNoteToDb
+  //   passwordSet   – bool: does this note have a server-side password?
   let notes            = JSON.parse(localStorage.getItem('nc_notes') || '[]');
   let activeId         = null;
   let autosaveTimer    = null;
@@ -123,10 +123,10 @@ document.addEventListener('DOMContentLoaded', function () {
   let previewVisible   = true;
   let langDropdownOpen = false;
   let passwordTarget   = null;
-  let sharedNoteDbId   = null;   // встановлюється при показі запиту пароля для shared нотатки
+  let sharedNoteDbId   = null;   // set when showing password prompt for a shared note
   let currentTheme     = localStorage.getItem('nc_theme') || 'dark';
  
-  // ── ДОПОМІЖНІ ФУНКЦІЇ ──────────────────────────
+  // ── UTILITY FUNCTIONS ──────────────────────────
   function generateId() {
     return Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
   }
@@ -160,10 +160,11 @@ document.addEventListener('DOMContentLoaded', function () {
       .replace(/"/g, '&quot;');
   }
  
-// Збереження нотаток у localStorage (завжди). Синхронізація з БД виконується окремо через syncNoteToDb()  function saveNotes() {
+  // Save notes array to localStorage (always). DB sync is done explicitly via syncNoteToDb().
+  function saveNotes() {
     const clean = notes.map(function (n) {
       const c = Object.assign({}, n);
-      delete c.passwordPlain;   // ніколи не зберігати пароль у відкритому вигляді в localStorage
+      delete c.passwordPlain;   // never persist plain-text password to localStorage
       return c;
     });
     localStorage.setItem('nc_notes', JSON.stringify(clean));
@@ -173,16 +174,16 @@ document.addEventListener('DOMContentLoaded', function () {
     return notes.find(function (n) { return n.id === id; });
   }
  
-  // Повертає публічне посилання для нотатки, яка синхронізована з БД
-  // Веде на shared.php, який редіректить на index.html?share=<dbId>
-  // після чого клієнт отримує дані через view.php
+  // Return the public share URL for a note that has been synced to the DB.
+  // Points at shared.php which redirects through index.html with ?share=<dbId>,
+  // which then fetches the note from view.php client-side.
   function shareUrl(note) {
     var base = location.origin + location.pathname.replace(/\/[^\/]*$/, '');
     var id   = note.dbId || '';
     return base + '/shared.php?id=' + encodeURIComponent(id);
   }
  
-  // ── СПОВІЩЕННЯ ──────────────────────────────────────
+  // ── TOAST ──────────────────────────────────────
   function toast(msg, type) {
     type = type || 'info';
     const c = document.getElementById('toastContainer');
@@ -200,7 +201,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }, 2800);
   }
  
-  // ── ТЕМА ──────────────────────────────────────
+  // ── THEME ──────────────────────────────────────
   function applyTheme(t) {
     currentTheme = t;
     document.documentElement.setAttribute('data-theme', t);
@@ -210,19 +211,19 @@ document.addEventListener('DOMContentLoaded', function () {
       : 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css';
     const themeIcon = document.getElementById('themeIcon');
     themeIcon.innerHTML = '<svg><use href="' + (t === 'dark' ? '#ic-moon' : '#ic-sun') + '"/></svg>';
-    // перерендерити прев’ю з новими кольорами підсвітки
+    // Re-render preview with new theme's highlight colours
     const note = getNote(activeId);
     if (note) updatePreview(note.content);
   }
  
-  // застосувати збережену тему одразу (DOM вже завантажений)
+  // Apply saved theme immediately (DOM already rendered before this runs)
   applyTheme(currentTheme);
  
   document.getElementById('themeToggleLabel').addEventListener('click', function () {
     applyTheme(currentTheme === 'dark' ? 'light' : 'dark');
   });
  
-  // ── ПОПЕРЕДНІЙ ПЕРЕГЛЯД ────────────────────────────────────
+  // ── PREVIEW ────────────────────────────────────
   marked.setOptions({ breaks: true, gfm: true });
  
   function updatePreview(md) {
@@ -251,7 +252,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
  
-  // ── ВИПАДАЮЧИЙ СПИСОК МОВ ──────────────────────────
+  // ── LANGUAGE DROPDOWN ──────────────────────────
   function buildLangList(filter) {
     filter = filter || '';
     const list = document.getElementById('langList');
@@ -307,7 +308,7 @@ document.addEventListener('DOMContentLoaded', function () {
     buildLangList(e.target.value);
   });
  
-  // ── sidebar ─────────────────────────────
+  // ── SIDEBAR RENDER ─────────────────────────────
   function renderSidebar(filter) {
     filter = filter || '';
     const list = document.getElementById('notesList');
@@ -371,30 +372,18 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
  
-  // ── ВІДОБРАЖЕННЯ РЕДАКТОРА ТА READ-ONLY ──────────────
+  // ── EDITOR SHOW/HIDE & READ-ONLY ──────────────
   function setReadOnly(isReadOnly) {
     var app    = document.getElementById('app');
     var banner = document.getElementById('readonlyBanner');
-
-    var title   = document.getElementById('noteTitle');
-    var content = document.getElementById('noteContent');
-
     if (isReadOnly) {
       app.classList.add('editor-readonly');
       banner.classList.remove('hidden');
-
-      title.readOnly = true;
-      content.readOnly = true;
-
     } else {
       app.classList.remove('editor-readonly');
       banner.classList.add('hidden');
-
-      title.readOnly = false;
-      content.readOnly = false;
     }
   }
-
  
   function showEditor(note) {
     document.getElementById('noteTitle').style.display   = '';
@@ -402,14 +391,14 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('emptyState').style.display  = 'none';
     document.getElementById('noteTitle').value   = note.title;
     document.getElementById('noteContent').value = note.content;
-    // Блокуємо редактор, якщо нотатка вже синхронізована з БД
-    // Користувач може читати локально, але не редагувати
-    // щоб уникнути розбіжностей з серверною версією
-    setReadOnly(!!note.shared);
+    // Lock the editor if this note has already been synced to the DB (shared).
+    // The owner can still read it locally but cannot make further edits
+    // that would silently diverge from the live shared copy.
+    setReadOnly(!!note.dbId);
   }
  
-  // Відображення спільної нотатки в режимі тільки для читання
-  // Локальний об'єкт не використовується; activeId = null
+  // Show a shared note's content in the editor in pure read-only mode.
+  // No local note object is involved; activeId stays null.
   function showSharedEditor(title, content) {
     document.getElementById('noteTitle').style.display   = '';
     document.getElementById('noteContent').style.display = '';
@@ -451,31 +440,29 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
  
-  // ── ПЕРЕВІРКА ІСНУВАННЯ В БД ────────────────────
-  // Для нотаток, які вже опубліковані на сервері (note.dbId встановлений),
-  // викликаємо view.php, щоб перевірити, чи запис ще існує.
+  // ── DB EXISTENCE CHECK ─────────────────────────
+  // For notes that have been published to the server (note.dbId is set),
+  // call view.php to verify the row still exists.
   //
-  // Побічний ефект: для read-once нотаток БЕЗ пароля view.php видалить запис
-  // під час цього запиту. Це очікувана поведінка — перевірка і є читанням,
-  // тому окремий DELETE виклик не потрібен.
+  // Side-effect: for read-once notes WITHOUT a password, view.php will delete
+  // the row as part of this request. That is intentional — the check IS the
+  // read, so no second delete call is needed.
   //
-  // Повертає:
-  //   'ok'       – запис доступний (read-once вже видалені на сервері)
-  //   'gone'     – запис вже видалений або протермінований
-  //   'password' – запис існує, але вимагає пароль
-  //   'error'    – помилка мережі/сервера; виклик має обробити як fail-open
+  // Returns:
+  //   'ok'       – row is accessible (read-once rows are now deleted server-side)
+  //   'gone'     – row was already deleted or has expired
+  //   'password' – row exists but requires a password
+  //   'error'    – network/server failure; caller should fail open
   async function checkNoteExistsOnServer(dbId) {
     try {
       const res = await apiGet('view.php?id=' + encodeURIComponent(dbId));
   
       if (!res || typeof res !== 'object') return 'error';
   
-      // destroyed:true означає, що view.php щойно віддав нотатку І видалив її —
-      // дані були валідні та використані в цьому запиті → вважаємо як 'ok',
-      // щоб клієнт міг показати її з локального кешу і потім видалити локально.
-      // НЕ повертати 'gone' — 'gone' означає, що ми запізнились.
-      if (res.destroyed === true) return 'ok';
+      // 🔥 якщо нотатка була read_once і вже відкривалась
+      if (res.destroyed === true) return 'gone';
   
+      // 🔴 КЛЮЧОВИЙ ФІКС
       if (res.error === 'password_required') {
         return 'password';
       }
@@ -491,13 +478,13 @@ document.addEventListener('DOMContentLoaded', function () {
   
       return 'ok';
   
-    } catch (e) {
+  }   catch (e) {
       console.warn('checkNoteExistsOnServer error', e);
       return 'error';
     }
   }
  
-  // видаляє нотатку з локального стану та коректно оновлює інтерфейс
+  // Remove a note from local state and update the UI cleanly.
   function purgeLocalNote(id) {
     notes = notes.filter(function (n) { return n.id !== id; });
     saveNotes();
@@ -505,14 +492,14 @@ document.addEventListener('DOMContentLoaded', function () {
     renderSidebar(document.getElementById('searchInput').value);
   }
  
-  // ── CRUD для нотатки ──────────────────────────────────
+  // ── NOTE CRUD ──────────────────────────────────
   function newNote() {
     var note = {
       id: generateId(), title: '', content: '',
       createdAt: Date.now(), updatedAt: Date.now(),
       readOnce: false, expireIn: null, expireAt: null,
       password: '', passwordSet: false, pinned: false,
-      dbId: null,   // заповнюється лише коли користувач явно поширює нотатку через "Apply & Generate Link"
+      dbId: null,   // populated only when user explicitly shares via Apply & Generate Link
 	  editToken: null,
     };
     notes.unshift(note);
@@ -523,64 +510,58 @@ document.addEventListener('DOMContentLoaded', function () {
   }
  
   async function openNote(id, skipCheck) {
-	// skipCheck=true допустимий лише для нових нотаток (ще без dbId).
-	// Він НЕ повинен обходити перевірку сервера для нотаток, що вже мають dbId.
-    var skipServer = skipCheck === true;
+    skipCheck = skipCheck || false;
     var note = getNote(id);
     if (!note) return;
-
-    // ── 1. Локальна перевірка терміну дії ───────────────────────────────────────────────
+ 
+    // ── 1. Local expiry check ───────────────────────────────────────────────
     if (note.expireAt && Date.now() > note.expireAt) {
       purgeLocalNote(id);
       toast('Нотатка застаріла', 'info');
       return;
     }
-
-    // ── 2. Перевірка на сервері — обов’язкова для кожної нотатки з dbId ────────
-    // Виконується ДО перевірки локального пароля, щоб сервер міг повідомити,
-    // чи нотатку вже було використано на іншому пристрої (read-once) або видалено.
-    // Пропускається лише якщо dbId ще відсутній (нова, ще не синхронізована).
-    if (!skipServer && note.dbId) {
+ 
+    // ── 2. Local password lock ──────────────────────────────────────────────
+    if (!skipCheck && note.password && !note._unlocked) {
+      promptPassword(id);
+      return;
+    }
+ 
+    // ── 3. Server-side existence check for any published note ───────────────
+    // skipCheck is true only for internal calls (newNote, after password
+    // unlock) where we already know the note is valid — skip the round-trip.
+    if (!skipCheck && note.dbId) {
       var status = await checkNoteExistsOnServer(note.dbId);
-
-      // Збій мережі — заборонити доступ; ніколи не показувати застарілий локальний контент
-      if (status === 'error') {
-        toast('Не вдалося перевірити нотатку на сервері. Перевірте зʼєднання.', 'error');
-        return;
-      }
-
-      // Нотатка більше не існує на сервері
+ 
       if (status === 'gone') {
         purgeLocalNote(id);
         toast('Нотатку не знайдено або її вже видалено', 'error');
         return;
       }
+ 
+      if (status === 'password' && !note.password) {
 
-      // Сервер вимагає пароль
-      if (status === 'password') {
+        // 🔥 якщо це read_once — вважаємо що вже видалено
         if (note.readOnce) {
-		// read-once + password_required: нотатка могла вже бути використана деінде.
-		// Ніколи не запитувати повторно — вважати видаленою, щоб уникнути повторного доступу.
           purgeLocalNote(id);
           toast('Нотатку вже видалено', 'info');
           return;
-        }
-        // Звичайна нотатка з паролем — перейти до локальної перевірки нижче
       }
 
-      // status === 'ok' → нотатка підтверджена на сервері.
-	  // Для read-once нотаток запис на сервері видаляється цим GET-запитом.
-    }
+    promptPassword(id);
+    return;
 
-    // ── 3. Локальна перевірка пароля ──────────────────────────────────────────────
-    // Виконується лише якщо сервер підтвердив існування нотатки (або немає dbId).
-    if (note.password && !note._unlocked) {
-      promptPassword(id);
-      return;
+}
+      // status 'ok'    → proceed; for read-once notes the row is now gone
+      //                  server-side (consumed by the GET above)
+      // status 'error' → offline; fail open and show local content
     }
-
-    // ── 4. Read-once: показати контент і потім видалити локальну копію ────────────────────
-    if (note.readOnce && !skipServer) {
+ 
+    // ── 4. Read-once: show content then clean up local state ────────────────
+    // If dbId exists, step 3's GET already triggered the server-side delete.
+    // If no dbId (never published), the note only ever lived locally.
+    // Either way, remove from local store so it won't reappear on next load.
+    if (note.readOnce && !skipCheck) {
       activeId = id;
       showEditor(note);
       updatePreview(note.content);
@@ -592,8 +573,8 @@ document.addEventListener('DOMContentLoaded', function () {
       toast('Одноразова нотатка — видалено з бази даних. Вміст доступний лише в поточному сеансі.', 'info');
       return;
     }
-
-    // ── 5. Звичайне відкриття ──────────────────────────────────────────────────────
+ 
+    // ── 5. Normal open ──────────────────────────────────────────────────────
     activeId = id;
     showEditor(note);
     updatePreview(note.content);
@@ -624,44 +605,25 @@ document.addEventListener('DOMContentLoaded', function () {
     saveNotes();
     renderSidebar(document.getElementById('searchInput').value);
     toast('Нотатку видалено', 'info');
-    // Спроба видалення з БД (best-effort)
+    // Best-effort delete from DB
     if (dbId) {
       apiDelete('delete.php', { id: dbId, edit_token: note.editToken }).catch(function () {});
     }
   }
  
-  // ── АВТОЗБЕРЕЖЕННЯ ─────────────────────────────
-  // Кожна нотатка з вмістом автоматично синхронізується з БД,
-  // щоб посилання працювали на будь-якому пристрої без відкриття share modal.
-  //   - Немає dbId           → створюємо запис, зберігаємо отриманий dbId
-  //   - Є dbId, не shared    → оновлюємо існуючий запис
-  //   - note.shared = true   → пропускаємо; запис заблокований після публікації
+  // ── AUTOSAVE ───────────────────────────────────
   function scheduleAutosave() {
     clearTimeout(autosaveTimer);
     autosaveTimer = setTimeout(async function () {
       var note = getNote(activeId);
       if (!note) return;
-
-      // Завжди зберігати в localStorage
+      // Never autosave a note that has been shared (read-only)
+      if (note.dbId) return;
       saveNotes();
-
-      // Показати індикатор збереження
+      // Show saved indicator
       var ind = document.getElementById('autosaveIndicator');
       ind.classList.add('visible');
       setTimeout(function () { ind.classList.remove('visible'); }, 2000);
-
-      // Пропустити синхронізацію з БД для явно опублікованих нотаток — контент зафіксований
-      if (note.shared) return;
-
-      // Синхронізувати лише якщо є що зберігати
-      if (!note.title.trim() && !note.content.trim()) return;
-
-      // Синхронізувати з БД (створити, якщо ще немає dbId, інакше оновити)
-      var dbId = await syncNoteToDb(note);
-      if (dbId && !note.dbId) {
-        note.dbId = dbId;
-        saveNotes();
-      }
     }, 900);
   }
  
@@ -688,7 +650,7 @@ document.addEventListener('DOMContentLoaded', function () {
   document.getElementById('noteContent').addEventListener('click',  updateToolbarStates);
   document.getElementById('noteContent').addEventListener('select', updateToolbarStates);
  
-  // ── АВТОПРОДОВЖЕННЯ НУМЕРОВАНИХ / МАРКОВАНИХ СПИСКІВ ───────
+  // ── NUMBERED / BULLET LIST AUTO-CONTINUE ───────
   document.getElementById('noteContent').addEventListener('keydown', function (e) {
     if (e.key !== 'Enter') return;
     const ta  = e.target;
@@ -697,12 +659,12 @@ document.addEventListener('DOMContentLoaded', function () {
     const lineStart = val.lastIndexOf('\n', pos - 1) + 1;
     const line = val.substring(lineStart, pos);
  
-    // Нумерований список
+    // Ordered list
     const olM = line.match(/^(\s*)(\d+)\.\s(.*)$/);
     if (olM) {
       e.preventDefault();
       if (olM[3].trim() === '') {
-        // Порожній елемент → завершити
+        // Empty item → break out
         ta.value = val.substring(0, lineStart) + '\n' + val.substring(pos);
         ta.selectionStart = ta.selectionEnd = lineStart + 1;
       } else {
@@ -713,7 +675,7 @@ document.addEventListener('DOMContentLoaded', function () {
       return;
     }
  
-    // Маркований список
+    // Unordered list
     const ulM = line.match(/^(\s*)([-*+])\s(.*)$/);
     if (ulM) {
       e.preventDefault();
@@ -728,7 +690,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   });
  
-  // ── форматування ─────────────────────────
+  // ── FORMATTING HELPERS ─────────────────────────
   function getEditorCtx() {
     const ta  = document.getElementById('noteContent');
     const val = ta.value;
@@ -746,13 +708,13 @@ document.addEventListener('DOMContentLoaded', function () {
     const sel = val.substring(s, e);
  
     if (sel.startsWith(marker) && sel.endsWith(marker) && sel.length > m * 2) {
-      // Виділення обгорнуте → розгорнути
+      // Selection is wrapped → unwrap
       ta.setRangeText(sel.slice(m, -m), s, e, 'select');
     } else if (val.substring(s - m, s) === marker && val.substring(e, e + m) === marker) {
-      // Курсор всередині маркерів → видалити оточуючі маркери
+      // Cursor is inside markers → remove surrounding markers
       ta.setRangeText(sel, s - m, e + m, 'select');
     } else {
-      // Обгорнути виділення або плейсхолдер
+      // Wrap selection or placeholder
       const rep = marker + (sel || placeholder) + marker;
       ta.setRangeText(rep, s, e, 'select');
       if (!sel) {
@@ -768,14 +730,14 @@ document.addEventListener('DOMContentLoaded', function () {
     const { ta, val, ls, le, s } = getEditorCtx();
     const line = val.substring(ls, le);
     if (line.startsWith(prefix)) {
-      // Видалення префікса: встановити курсор на початкову позицію мінус довжина префікса (з обмеженням)
+      // Removing prefix: place cursor at original offset minus prefix length (clamped)
       const newPos = Math.max(ls, s - prefix.length);
       ta.setRangeText(line.slice(prefix.length), ls, le, 'preserve');
       ta.selectionStart = ta.selectionEnd = newPos;
     } else {
-      // Додавання префікса: встановити курсор одразу після нового префікса
+      // Adding prefix: place cursor right after the newly inserted prefix
       ta.setRangeText(prefix + line, ls, le, 'preserve');
-      // Курсор має стояти одразу після префікса, щоб користувач міг одразу вводити текст
+      // Cursor should sit just after the prefix so the user can type immediately
       const cursorPos = ls + prefix.length;
       ta.selectionStart = ta.selectionEnd = cursorPos;
     }
@@ -789,21 +751,21 @@ document.addEventListener('DOMContentLoaded', function () {
     const m = line.match(/^(#{1,6})\s/);
     if (m) {
       if (m[1] === hashes) {
-        // Повністю видалити заголовок
+        // Remove heading entirely
         const newText = line.replace(/^#{1,6}\s/, '');
         ta.setRangeText(newText, ls, le, 'preserve');
         ta.selectionStart = ta.selectionEnd = ls;
       } else {
-        // Замінити рівень існуючого заголовка
+        // Replace existing heading level
         const newText = line.replace(/^#{1,6}\s/, hashes + ' ');
         ta.setRangeText(newText, ls, le, 'preserve');
-        // Встановити курсор після нового префікса заголовка (решітки + пробіл)
+        // Place cursor after the new heading prefix (hashes + space)
         ta.selectionStart = ta.selectionEnd = ls + hashes.length + 1;
       }
     } else {
-      // Вставити префікс заголовка
+      // Insert heading prefix
       ta.setRangeText(hashes + ' ' + line, ls, le, 'preserve');
-      // Встановити курсор одразу після "### ", щоб почати вводити текст заголовка
+      // Place cursor right after "### " so typing starts the heading text
       ta.selectionStart = ta.selectionEnd = ls + hashes.length + 1;
     }
     ta.focus();
@@ -852,14 +814,14 @@ document.addEventListener('DOMContentLoaded', function () {
     const nl = (before.length && !before.endsWith('\n')) ? '\n' : '';
     const ins = nl + '```' + lang + '\n\n```\n';
     ta.setRangeText(ins, pos, pos, 'end');
-    // Встановити курсор всередині блоку
+    // Place cursor inside the block
     const blockStart = ta.value.lastIndexOf('```' + lang + '\n') + ('```' + lang + '\n').length;
     ta.selectionStart = ta.selectionEnd = blockStart;
     ta.focus();
     ta.dispatchEvent(new Event('input'));
   }
  
-  // ── ОБРОБНИК КНОПОК ПАНЕЛІ ІНСТРУМЕНТІВ ─────────────────────
+  // ── TOOLBAR BUTTON HANDLER ─────────────────────
   document.querySelectorAll('[data-action]').forEach(function (btn) {
     btn.addEventListener('click', function () {
       if (!activeId) { toast('Спочатку виберіть або створіть нотатку', 'error'); return; }
@@ -876,7 +838,7 @@ document.addEventListener('DOMContentLoaded', function () {
       else if (a === 'link') {
         const { ta, val, s, e } = getEditorCtx();
 
-        // Спробувати визначити Markdown-посилання навколо курсора
+        // Try to detect a Markdown link around the cursor
         const left  = val.lastIndexOf('[', s);
         const right = val.indexOf(')', s);
 
@@ -887,7 +849,7 @@ document.addEventListener('DOMContentLoaded', function () {
           if (m) {
             const text = m[1];
 
-            // Замінити все посилання на звичайний текст
+            // Replace the whole link with plain text
             ta.setRangeText(text, left, right + 1, 'end');
             ta.focus();
             ta.dispatchEvent(new Event('input'));
@@ -897,7 +859,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const sel = val.substring(s, e);
 
-        // Вставити нове посилання
+        // Insert new link
         const linkText = sel || 'link text';
         const insertion = '[' + linkText + '](https://example.com)';
 
@@ -916,7 +878,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   });
  
-  // ── HEADER КНОПКИ ─────────────────────────────
+  // ── HEADER BUTTONS ─────────────────────────────
   document.getElementById('sidebarToggle').addEventListener('click', function () {
     document.getElementById('app').classList.toggle('sidebar-collapsed');
   });
@@ -936,20 +898,20 @@ document.addEventListener('DOMContentLoaded', function () {
   document.getElementById('exportBtn').addEventListener('click', function () {
     const note = getNote(activeId);
     if (!note) { toast('Нотатку не вибрано', 'error'); return; }
-    // charset=utf-8 необхідний, щоб кирилиця та інші не-ASCII символи
-	// коректно зберігались у завантаженому файлі.
+    // charset=utf-8 is required so that Cyrillic and other non-ASCII characters
+    // are preserved correctly in the downloaded file.
     const blob = new Blob(['# ' + note.title + '\n\n' + note.content], { type: 'text/markdown;charset=utf-8' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-	// Зберігати Unicode-символи в імені файлу — видаляти лише реально небезпечні для ФС
-	// символи (/ \ : * ? " < > |), а не всі не-ASCII.
+    // Preserve Unicode characters in filename — only strip actual filesystem-unsafe
+    // characters (/ \ : * ? " < > |) rather than everything non-ASCII.
     const safeName = (note.title || 'нотатка').replace(/[\/\\:*?"<>|]/g, '_').trim() || 'нотатка';
     a.download = safeName + '.md';
     a.click();
     toast('Експортовано як Markdown', 'success');
   });
  
-  // ── МОДАЛЬНЕ ВІКНО SHARE ────────────────────────────────
+  // ── SHARE MODAL ────────────────────────────────
   function updateShareLinkDisplay(note) {
     var el = document.getElementById('shareLinkUrl');
     if (note && note.dbId) {
@@ -967,9 +929,8 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('expiryRow').style.display = note.expireIn ? '' : 'none';
     document.getElementById('notePassword').value = '';
  
-    // Використовувати note.shared (а не note.dbId) для перевірки блокування.
-	// dbId тепер призначається при першій автосинхронізації; shared встановлюється лише після явної публікації.
-    var alreadyShared = !!note.shared;
+    // Fix 2: reset controls — disable immediately if already shared, enable otherwise
+    var alreadyShared = !!note.dbId;
     document.getElementById('readOnceCheck').disabled  = alreadyShared;
     document.getElementById('hasExpiryCheck').disabled = alreadyShared;
     document.getElementById('expirySelect').disabled   = alreadyShared;
@@ -986,9 +947,9 @@ document.addEventListener('DOMContentLoaded', function () {
       applyBtn.style.background = '';
     }
  
-    // показати посилання, якщо вже опубліковано, інакше показати плейсхолдер
+    // Always show placeholder on open — link only revealed after Apply
     document.getElementById('shareLinkUrl').textContent =
-      (note.shared && note.dbId) ? shareUrl(note) : 'Натисніть «Зберегти і згенерувати посилання»';
+      note.dbId ? shareUrl(note) : 'Натисніть «Зберегти і згенерувати посилання»';
     document.getElementById('shareModal').classList.add('open');
   });
  
@@ -1004,7 +965,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var note = getNote(activeId);
     if (!note) return;
  
-    // ── перевірити обов’язкові поля перед будь-яким записом у БД ───────────────
+    // ── Fix 1: Validate required fields before any DB write ───────────────
     if (!note.title.trim()) {
       toast('Будь ласка, додайте назву нотатки', 'error');
       document.getElementById('shareModal').classList.remove('open');
@@ -1022,7 +983,7 @@ document.addEventListener('DOMContentLoaded', function () {
     applyBtn.textContent = 'Збереження…';
     applyBtn.disabled = true;
  
-    // оновити локальні поля
+    // Update local fields
     note.readOnce = document.getElementById('readOnceCheck').checked;
     var hasExpiry = document.getElementById('hasExpiryCheck').checked;
     var expireInSec = hasExpiry
@@ -1038,11 +999,10 @@ document.addEventListener('DOMContentLoaded', function () {
       note.passwordSet   = true;
     }
  
-    // ── Синхронізація з БД ────────────────────────────────────────────────────────
+    // ── Sync to DB ────────────────────────────────────────────────────────
     var dbId = await syncNoteToDb(note);
     if (dbId) {
       note.dbId          = dbId;
-      note.shared        = true;   // позначає нотатку як опубліковану — редактор блокується
       note.passwordPlain = undefined;
       saveNotes();
       updateTempBanner(note);
@@ -1050,7 +1010,7 @@ document.addEventListener('DOMContentLoaded', function () {
       updateShareLinkDisplay(note);
       setReadOnly(true);
  
-      // ── заблокувати всі елементи форми share-modal після успішної генерації
+      // ── Fix 2: Lock all share-modal form controls after successful generation
       document.getElementById('readOnceCheck').disabled  = true;
       document.getElementById('hasExpiryCheck').disabled = true;
       document.getElementById('expirySelect').disabled   = true;
@@ -1085,7 +1045,7 @@ document.addEventListener('DOMContentLoaded', function () {
     toast('Посилання скопійовано!', 'success');
   });
  
-  // ── MODAL видалення ───────────────────────────────
+  // ── DELETE MODAL ───────────────────────────────
   document.getElementById('deleteModalClose').addEventListener('click', function () {
     document.getElementById('deleteModal').classList.remove('open');
   });
@@ -1095,7 +1055,7 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('deleteModal').classList.remove('open');
   });
  
-  // ── MODAL паролю ─────────────────────────────
+  // ── PASSWORD MODAL ─────────────────────────────
   function promptPassword(id) {
     passwordTarget = id;
     sharedNoteDbId = null;
@@ -1113,7 +1073,7 @@ document.addEventListener('DOMContentLoaded', function () {
   document.getElementById('confirmPassword').addEventListener('click', async function () {
     var pwd = document.getElementById('passwordInput').value;
  
-    // Спільна нотатка (пароль на стороні сервера)
+    // Shared note (server-side password)
     if (sharedNoteDbId) {
 	  if (!pwd) {
         toast('Введіть пароль', 'error');
@@ -1126,15 +1086,13 @@ document.addEventListener('DOMContentLoaded', function () {
       return;
     }
  
-    // Локальна нотатка (пароль на клієнті, збережений у localStorage)
+    // Local note (client-side password stored in localStorage)
     var note = getNote(passwordTarget);
     if (!note) return;
     if (pwd === note.password) {
       note._unlocked = true;
       document.getElementById('passwordModal').classList.remove('open');
-      // НЕ передавати skipCheck=true — нотатки з dbId мають перевірятися
-	  // на сервері навіть після локального розблокування паролем.
-      openNote(passwordTarget);
+      openNote(passwordTarget, true);
       passwordTarget = null;
     } else {
       document.getElementById('passwordInput').style.borderColor = 'var(--red)';
@@ -1149,7 +1107,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (e.key === 'Enter') document.getElementById('confirmPassword').click();
   });
  
-  // ── контекстне меню ───────────────────────────────
+  // ── CONTEXT MENU ───────────────────────────────
   function showCtxMenu(e, id) {
     ctxTarget = id;
     const note = getNote(id);
@@ -1191,17 +1149,17 @@ document.addEventListener('DOMContentLoaded', function () {
     hideCtx();
   });
  
-  // Закрити контекстне меню при кліку поза ним
+  // Close context menu on outside click
   document.addEventListener('click', function (e) {
     const menu = document.getElementById('ctxMenu');
     if (menu.style.display !== 'none' && !menu.contains(e.target)) hideCtx();
-    // Закрити випадаючий список мов при кліку поза ним
+    // Close lang dropdown on outside click
     if (langDropdownOpen && !document.getElementById('langBtnWrap').contains(e.target)) {
       closeLangDropdown();
     }
   });
  
-  // ── гарячі клавіші (в розробці) ─────────────────────────
+  // ── KEYBOARD SHORTCUTS ─────────────────────────
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
       hideCtx();
@@ -1215,15 +1173,15 @@ document.addEventListener('DOMContentLoaded', function () {
     if ((e.ctrlKey || e.metaKey) && e.key === '\\') { e.preventDefault(); document.getElementById('sidebarToggle').click(); }
   });
  
-  // ── МАРШРУТИЗАЦІЯ URL ─────────────────────────────
-  // Підтримуються два типи URL:
-  //   #/note/<localId>        – старий hash-роутинг (власник на тому ж пристрої)
-  //   ?id=<dbId>              – shared-посилання на view.php; ми перехоплюємо
-  //                             його також на index.html для кращого UX
-  //   Прямий виклик: view.php?id=X   – обробляється сервером (view.php)
+  // ── URL ROUTING ────────────────────────────────
+  // Supports two URL patterns:
+  //   #/note/<localId>        – legacy hash routing (owner on same device)
+  //   ?id=<dbId>              – shared link pointing at view.php; we intercept
+  //                             this on index.html too for a nicer landing page
+  //   Direct: view.php?id=X   – handled by view.php server-side
  
   async function handleViewParam() {
-    // Якщо сторінка завантажена як index.html?share=<dbId>, відкрити спільну нотатку
+    // If the page was loaded as index.html?share=<dbId>, open the shared note
     var params = new URLSearchParams(location.search);
     var shareId = params.get('share');
     if (!shareId) return false;
@@ -1232,7 +1190,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
  
   async function openSharedNote(dbId, passwordAttempt) {
-    // очистити редактор під час завантаження
+    // Blank the editor while loading
     document.getElementById('emptyState').style.display  = '';
     document.getElementById('noteTitle').style.display   = 'none';
     document.getElementById('noteContent').style.display = 'none';
@@ -1255,17 +1213,17 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
       }
       if (res.error) {
-        // Нотатка прострочена, не знайдена або вже використана
+        // Note expired, not found, or already consumed
         toast(res.message || res.error || 'Нотатку не знайдено або вже видалено.', 'error');
         document.getElementById('emptyState').style.display = '';
         return;
       }
  
-      // ── Успіх: відобразити в режимі лише читання ────────────────────────────────
+      // ── Success: display in read-only mode ────────────────────────────────
       showSharedEditor(res.title || '', res.content || '');
       updatePreview(res.content || '');
  
-      // Показати тимчасовий банер, використовуючи метадані з сервера
+      // Show temp banner using the server-provided metadata
       var bannerNote = {
         readOnce: res.read_once,
         expireAt: res.expire_at ? new Date(res.expire_at).getTime() : null,
@@ -1286,7 +1244,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
  
-  // запит пароля спеціально для shared нотаток (перевірка на сервері)
+  // Password prompt specifically for shared notes (server-side password check)
   function showSharedPasswordPrompt(dbId) {
     sharedNoteDbId = dbId;
     document.getElementById('passwordInput').value = '';
@@ -1302,23 +1260,23 @@ document.addEventListener('DOMContentLoaded', function () {
     if (localNote) {
       openNote(id);
     } else {
-      // якщо ID відсутній у localStorage → вважаємо його dbId і отримуємо з сервера
+      // Hash ID not in localStorage → treat as a dbId and fetch from server
       openSharedNote(id, null);
     }
   }
   window.addEventListener('hashchange', handleHash);
  
-  // ── ІНІЦІАЛІЗАЦІЯ ───────────────────────────
-  // видалення прострочених локальних нотаток
+  // ── INIT ───────────────────────────────────────
+  // Remove locally expired notes
   notes = notes.filter(function (n) { return !n.expireAt || Date.now() < n.expireAt; });
   saveNotes();
   renderSidebar('');
  
-  // перевіряємо параметр ?share=<dbId> (посилання з модального вікна поширення, що веде на index.html)
+  // Check for ?share=<dbId> (link copied from share modal pointing at index.html)
   handleViewParam().then(function (handled) {
     if (!handled) {
       handleHash();
-      // відкрити першу доступну нотатку, якщо жодна не була відкрита через hash
+      // Open first available note if none opened by hash
       if (!activeId && notes.length) {
         var first = notes.find(function (n) { return !n.expireAt || Date.now() < n.expireAt; });
         if (first) openNote(first.id);
